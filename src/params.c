@@ -1,17 +1,19 @@
 #include "include/params.h"
-#include "doca_argp.h"
 #include "include/common.h"
-#include <bsd/string.h>
+#include <doca_argp.h>
+#include <doca_log.h>
+#include <string.h>
+DOCA_LOG_REGISTER(params.c);
 static doca_error_t pci_callback(void *param, void *config) {
   struct DMAConfig *conf = (struct DMAConfig *)config;
   const char *addr = (char *)param;
-  int addr_len = strnlen(addr, MAX_ARG_SIZE);
+  int addr_len = strlen(addr);
   if (addr_len == MAX_ARG_SIZE) {
     DOCA_LOG_ERR("Entered pci address exceeded buffer size of: %d",
                  MAX_ARG_SIZE - 1);
     return DOCA_ERROR_INVALID_VALUE;
   }
-  strlcpy(conf->pci_address, addr, addr_len);
+  strcpy(conf->pci_address, addr);
   return DOCA_SUCCESS;
 }
 static doca_error_t iteration_callback(void *param, void *config) {
@@ -127,6 +129,5 @@ doca_error_t register_params() {
                  doca_get_error_string(result));
     return result;
   }
-
   return DOCA_SUCCESS;
 }

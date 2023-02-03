@@ -1,3 +1,4 @@
+#pragma once
 #include <doca_error.h>
 #define MAX_ARG_SIZE 256 /* Maximum size of input argument */
 struct DMAConfig {
