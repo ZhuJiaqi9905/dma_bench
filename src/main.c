@@ -158,10 +158,6 @@ static doca_error_t do_dma_once(struct DocaCore *core,
   while ((result = doca_workq_progress_retrieve(
               core->workq, &event, DOCA_WORKQ_RETRIEVE_FLAGS_NONE)) ==
          DOCA_ERROR_AGAIN) {
-    /* Wait for the job to complete */
-    ts.tv_sec = 0;
-    ts.tv_nsec = SLEEP_IN_NANOS;
-    nanosleep(&ts, &ts);
   }
   if (result != DOCA_SUCCESS) {
     DOCA_LOG_ERR("Failed to retrieve DMA job: %s",
