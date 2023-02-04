@@ -9,10 +9,12 @@
 #include <doca_log.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <time.h>
 #include <sys/time.h>
+#include <time.h>
 DOCA_LOG_REGISTER(main.c);
-
+const unsigned char all_char[] =
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+#define ALL_CHAR_LEN sizeof(all_char)
 static doca_error_t dma_benchmark(struct doca_pci_bdf *pcie_dev,
                                   struct DMAConfig *config);
 static doca_error_t do_dma_once(struct DocaCore *core,
@@ -22,17 +24,97 @@ static doca_error_t do_dma_benchmark(struct DMAConfig *config,
                                      struct DocaCore *core,
                                      struct doca_buf *dst_doca_buf,
                                      struct doca_buf *src_doca_buf);
+static doca_error_t generate_random_data(struct doca_buf *buf) {
+  size_t len;
+  doca_error_t result = DOCA_SUCCESS;
+  result = doca_buf_get_data_len(buf, &len);
+  if (result != DOCA_SUCCESS) {
+    DOCA_LOG_ERR("Fail in get data len: %s", doca_get_error_string(result));
+    return result;
+  }
+  // DOCA_LOG_INFO("data len is %lu", len);
+  uint8_t *data;
+  result = doca_buf_get_data(buf, (void **)&data);
+  if (result != DOCA_SUCCESS) {
+    DOCA_LOG_ERR("Fail in get data: %s", doca_get_error_string(result));
+    return result;
+  }
+  for (int i = 0; i < len - 1; ++i) {
+    data[i] = all_char[rand() % ALL_CHAR_LEN];
+  }
+  data[len - 1] = 0;
+  return result;
+}
+static doca_error_t check_data(struct doca_buf *dst_buf,
+                               struct doca_buf *src_buf, int *is_equal) {
+  size_t src_len;
+  doca_error_t result = DOCA_SUCCESS;
+  result = doca_buf_get_data_len(src_buf, &src_len);
+  if (result != DOCA_SUCCESS) {
+    DOCA_LOG_ERR("Fail in get data len: %s", doca_get_error_string(result));
+    return result;
+  }
+  // DOCA_LOG_INFO("data len is %lu", src_len);
+  uint8_t *src_data;
+  result = doca_buf_get_data(src_buf, (void **)&src_data);
+  if (result != DOCA_SUCCESS) {
+    DOCA_LOG_ERR("Fail in get data: %s", doca_get_error_string(result));
+    return result;
+  }
+  size_t dst_len;
+  result = doca_buf_get_data_len(dst_buf, &dst_len);
+  if (result != DOCA_SUCCESS) {
+    DOCA_LOG_ERR("Fail in get data len: %s", doca_get_error_string(result));
+    return result;
+  }
+  // DOCA_LOG_INFO("data len is %lu", dst_len);
+  uint8_t *dst_data;
+  result = doca_buf_get_data(dst_buf, (void **)&dst_data);
+  if (result != DOCA_SUCCESS) {
+    DOCA_LOG_ERR("Fail in get data: %s", doca_get_error_string(result));
+    return result;
+  }
+  if (dst_len != src_len) {
+    DOCA_LOG_INFO("Src and dst len not equal");
+    *is_equal = 0;
+    return result;
+  }
+  DOCA_LOG_INFO("src data: %s, dst data: %s", src_data, dst_data);
+  for (size_t i = 0; i < src_len; ++i) {
+    if (dst_data[i] != src_data[i]) {
+      *is_equal = 0;
+      return result;
+    }
+  }
+  *is_equal = 1;
+  return result;
+}
 static doca_error_t do_dma_benchmark(struct DMAConfig *config,
                                      struct DocaCore *core,
                                      struct doca_buf *dst_doca_buf,
                                      struct doca_buf *src_doca_buf) {
   doca_error_t result = DOCA_SUCCESS;
   for (int i = 0; i < config->warm_up; ++i) {
+    result = generate_random_data(src_doca_buf);
+    if (result != DOCA_SUCCESS) {
+      DOCA_LOG_ERR("Fail in generate random data");
+      return result;
+    }
     result = do_dma_once(core, dst_doca_buf, src_doca_buf);
     if (result != DOCA_SUCCESS) {
       DOCA_LOG_ERR("Fail in dma operation. Warm up %d.", i);
+      return result;
     }
-    return result;
+    int is_equal;
+    result = check_data(dst_doca_buf, src_doca_buf, &is_equal);
+    if (result != DOCA_SUCCESS) {
+      DOCA_LOG_ERR("Fail in check data");
+      return result;
+    }
+    if (!is_equal) {
+      DOCA_LOG_ERR("src data and dst data not equal");
+      return result;
+    }
   }
   for (int i = 0; i < config->iterations; ++i) {
     struct timeval stv, etv;
@@ -42,10 +124,11 @@ static doca_error_t do_dma_benchmark(struct DMAConfig *config,
       DOCA_LOG_ERR("Fail in dma operation. Iteration %d.", i);
     }
     gettimeofday(&etv, NULL);
-    long duration = (etv.tv_sec - stv.tv_sec) * 1000000 + etv.tv_usec - stv.tv_usec;
+    long duration =
+        (etv.tv_sec - stv.tv_sec) * 1000000 + etv.tv_usec - stv.tv_usec;
     DOCA_LOG_INFO("duration %ldus", duration);
-    return result;
   }
+  return result;
 }
 static doca_error_t do_dma_once(struct DocaCore *core,
                                 struct doca_buf *dst_doca_buf,
@@ -227,7 +310,7 @@ static doca_error_t dma_benchmark(struct doca_pci_bdf *pcie_dev,
     goto fail_set_src_buff_data;
   }
   // do benchmark
-
+  do_dma_benchmark(config, &doca_core, dst_doca_buf, src_doca_buf);
 fail_set_src_buff_data:
   doca_buf_refcount_rm(dst_doca_buf, NULL);
 fail_construct_dst_buf:
