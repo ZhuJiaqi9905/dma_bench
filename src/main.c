@@ -116,6 +116,7 @@ static doca_error_t do_dma_benchmark(struct DMAConfig *config,
       return result;
     }
   }
+  double avg_duration = 0;
   for (int i = 0; i < config->iterations; ++i) {
     struct timeval stv, etv;
     gettimeofday(&stv, NULL);
@@ -126,8 +127,11 @@ static doca_error_t do_dma_benchmark(struct DMAConfig *config,
     gettimeofday(&etv, NULL);
     long duration =
         (etv.tv_sec - stv.tv_sec) * 1000000 + etv.tv_usec - stv.tv_usec;
+    avg_duration += duration;
     DOCA_LOG_INFO("duration %ldus", duration);
   }
+  avg_duration /= config->iterations;
+  DOCA_LOG_INFO("average duration %lf us", avg_duration);
   return result;
 }
 static doca_error_t do_dma_once(struct DocaCore *core,
